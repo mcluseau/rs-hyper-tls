@@ -20,6 +20,7 @@ pub struct HttpsConnector<T> {
     force_https: bool,
     http: T,
     tls: TlsConnector,
+    tls_server_name: Option<String>,
 }
 
 impl HttpsConnector<HttpConnector> {
@@ -90,6 +91,15 @@ impl<T> HttpsConnector<T> {
             |tls| HttpsConnector::from((http, tls.into())),
         )
     }
+
+    /// Get a HttpsConnector with a TLS server name override.
+    ///
+    /// This is useful in cases where you can't work around the URL's host but know the name you
+    /// expect from the remote server's certificate.
+    pub fn with_tls_server_name(mut self, server_name: impl Into<String>) -> Self {
+        self.tls_server_name = Some(server_name.into());
+        self
+    }
 }
 
 impl<T> From<(T, TlsConnector)> for HttpsConnector<T> {
@@ -98,6 +108,7 @@ impl<T> From<(T, TlsConnector)> for HttpsConnector<T> {
             force_https: false,
             http: args.0,
             tls: args.1,
+            tls_server_name: None,
         }
     }
 }
@@ -137,8 +148,10 @@ where
             return err(ForceHttpsButUriNotHttps.into());
         }
 
-        let host = dst
-            .host()
+        let host = self
+            .tls_server_name
+            .as_deref()
+            .or_else(|| dst.host())
             .unwrap_or("")
             .trim_matches(|c| c == '[' || c == ']')
             .to_owned();
